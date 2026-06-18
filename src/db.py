@@ -38,3 +38,8 @@ def load_workout_sets():
     df = con.execute("SELECT * FROM workout_sets ORDER BY date, workout, exercise, set_number").df()
     con.close()
     return df
+
+def delete_all_data():
+    con = get_connection()
+    con.execute("DELETE FROM workout_sets")
+    con.close()
