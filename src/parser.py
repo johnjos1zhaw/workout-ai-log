@@ -1,13 +1,16 @@
-import json
 import os
+import json
+from pathlib import Path  # <-- Neu importieren
 from datetime import datetime
 from typing import Any
-
 import pandas as pd
 from dotenv import load_dotenv
 from openai import OpenAI
 
 load_dotenv()
+client = OpenAI()
+
+
 
 EXPECTED_COLUMNS = [
     "date",
@@ -72,7 +75,7 @@ WORKOUT_SCHEMA: dict[str, Any] = {
 
 
 def parse_workout_note(raw_note: str) -> pd.DataFrame:
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    #client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     prompt = f"""
 You are a workout log parser.
@@ -80,6 +83,7 @@ You are a workout log parser.
 Convert the user's messy workout note into structured workout set rows.
 
 Rules:
+- **Exclusion Rule:** If an exercise name line, an EMOM block, or its accompanying notes contain the word "skipped" (or similar indicators like "skip", "skiped", "skpped", "ausgefallen", "übersprungen"), **completely ignore and exclude that entire exercise and all its sets** from the final output.
 - Output one row per set.
 - Date format must be YYYY-MM-DD.
 - Input dates like 16.6.26 mean 2026-06-16.
@@ -103,12 +107,14 @@ Messy workout note:
 {raw_note}
 """
 
-    response = client.responses.create(
-        model="gpt-4.1-mini",
-        input=prompt,
-        text={
-            "format": {
-                "type": "json_schema",
+    response = client.chat.completions.create(
+        model="gpt-4o",  # Korrigiert: gpt-4o-mini statt gpt-4.1-mini
+        messages=[
+            {"role": "user", "content": prompt}
+        ],
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
                 "name": "workout_sets",
                 "schema": WORKOUT_SCHEMA,
                 "strict": True,
@@ -116,7 +122,9 @@ Messy workout note:
         },
     )
 
-    parsed = json.loads(response.output_text)
+    # Korrigiert: Zugriff auf den Textinhalt der Chat-Completion
+    response_text = response.choices[0].message.content
+    parsed = json.loads(response_text)
     df = pd.DataFrame(parsed["sets"])
 
     df = df[EXPECTED_COLUMNS]
