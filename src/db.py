@@ -35,7 +35,34 @@ def insert_workout_sets(df):
 
 def load_workout_sets():
     con = get_connection()
-    df = con.execute("SELECT * FROM workout_sets ORDER BY date, workout, exercise, set_number").df()
+    has_sessions = con.execute(
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='sessions'"
+    ).fetchone()[0] > 0
+    if has_sessions:
+        df = con.execute("""
+            SELECT CAST(s.session_date AS TIMESTAMP) AS date,
+                   s.name AS workout,
+                   COALESCE(json_extract_string(l.raw_json, '$.exercise'), se.name) AS exercise,
+                   se.name AS exercise_standardized,
+                   ss.set_number,
+                   TRY_CAST(json_extract_string(l.raw_json, '$.target_sets') AS INTEGER) AS target_sets,
+                   ss.reps, ss.duration_sec, ss.weight_kg,
+                   CASE WHEN l.set_id IS NOT NULL
+                        THEN json_extract_string(l.raw_json, '$.load_type')
+                        ELSE se.kind END AS load_type,
+                   json_extract_string(l.raw_json, '$.is_unilateral_note') AS is_unilateral_note,
+                   ss.notes
+            FROM session_sets ss
+            JOIN session_exercises se ON se.id=ss.session_exercise_id
+            JOIN sessions s ON s.id=se.session_id
+            LEFT JOIN legacy_row_map l ON l.set_id=ss.id
+            WHERE s.status='completed'
+            ORDER BY date, workout, exercise, ss.set_number
+        """).df()
+    else:
+        df = con.execute(
+            "SELECT * FROM workout_sets ORDER BY date, workout, exercise, set_number"
+        ).df()
     con.close()
     return df
 

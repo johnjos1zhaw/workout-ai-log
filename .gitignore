@@ -217,3 +217,5 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+data/*.pre_gymcoach_backup.duckdb
+data/*.before_core_templates.duckdb

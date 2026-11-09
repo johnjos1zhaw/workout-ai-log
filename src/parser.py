@@ -7,7 +7,9 @@ import pandas as pd
 from dotenv import load_dotenv
 from openai import OpenAI
 
-load_dotenv()
+# The local .env is the explicitly configured key for this application.
+# Without a .env file, a deployment-provided environment key remains usable.
+load_dotenv(override=True)
 client = OpenAI()
 
 

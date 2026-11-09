@@ -5,6 +5,9 @@ import plotly.express as px
 from src.db import init_db, insert_workout_sets, load_workout_sets, delete_all_data
 from src.parser import parse_workout_note
 from src.exercise_normalizer import normalize_exercise_dataframe
+from src.training_ui import render as render_training
+from src.progress_ui import render as render_progress
+from src.training import import_workout_sets, imported_sets
 from src.metrics import (
     add_metrics,
     dashboard_summary,
@@ -36,8 +39,8 @@ init_db()
 
 st.title("Workout AI Log")
 
-tab_import, tab_data, tab_dashboard = st.tabs(
-    ["Import workout", "Data", "Dashboard"]
+tab_import, tab_data, tab_dashboard, tab_training, tab_progress = st.tabs(
+    ["Import workout", "Data", "Dashboard", "Trainingsverwaltung", "KI-Fortschritt"]
 )
 
 with tab_import:
@@ -58,8 +61,9 @@ with tab_import:
                 parsed_df = normalize_exercise_dataframe(parsed_df)
             
             st.session_state["preview_df"] = parsed_df
+            st.session_state.pop("last_import_receipt", None)
             st.success(f"Parsed {len(parsed_df)} sets.")
-            st.dataframe(parsed_df, use_container_width=True)
+            st.dataframe(parsed_df, width="stretch")
 
     st.divider()
     st.subheader("Paste your workout table")
@@ -100,25 +104,47 @@ with tab_import:
                     df[col] = pd.to_numeric(df[col], errors="coerce")
                     df = normalize_exercise_dataframe(df)
                 st.session_state["preview_df"] = df
+                st.session_state.pop("last_import_receipt", None)
 
                 if extra_cols:
                     st.warning(f"Ignoring extra columns: {extra_cols}")
 
                 st.success(f"Parsed {len(df)} rows.")
-                st.dataframe(df, use_container_width=True)
+                st.dataframe(df, width="stretch")
+
+    if "last_import_receipt" in st.session_state:
+        receipt = st.session_state["last_import_receipt"]
+        saved_rows = imported_sets(receipt["set_ids"])
+        if len(saved_rows) == receipt["row_count"]:
+            st.success(
+                f"{receipt['row_count']} Sätze in DuckDB gespeichert und erneut gelesen. "
+                f"{len(receipt['session_ids'])} Trainingseinheit(en) in der Historie."
+            )
+            st.subheader("Gespeicherte Sätze")
+            st.dataframe(
+                pd.DataFrame(saved_rows).drop(columns=["set_id"]),
+                width="stretch",
+            )
+        else:
+            st.error("Die gespeicherten Sätze konnten nicht vollständig bestätigt werden.")
 
     if "preview_df" in st.session_state:
         st.subheader("Editable preview")
+        st.info("Diese Daten sind noch nicht gespeichert. Prüfe sie und klicke dann auf „Save to database“.")
         edited_df = st.data_editor(
             st.session_state["preview_df"],
-            use_container_width=True,
+            width="stretch",
             num_rows="dynamic",
         )
 
         if st.button("Save to database"):
-            insert_workout_sets(edited_df)
-            st.success("Workout data saved.")
-            del st.session_state["preview_df"]
+            try:
+                st.session_state["last_import_receipt"] = import_workout_sets(edited_df)
+            except Exception as exc:
+                st.error(f"Speichern fehlgeschlagen: {exc}")
+            else:
+                del st.session_state["preview_df"]
+                st.rerun()
 
 with tab_data:
     st.subheader("Stored workout sets")
@@ -128,7 +154,7 @@ with tab_data:
     if df.empty:
         st.info("No data saved yet.")
     else:
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df, width="stretch")
 
 with tab_dashboard:
     st.subheader("Workout dashboard")
@@ -142,9 +168,9 @@ with tab_dashboard:
         summary = dashboard_summary(df)
 
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Weekly volume", f"{summary['weekly_volume']:,.0f} kg")
-        col2.metric("Training days this week", summary["training_days_this_week"])
-        col3.metric("PRs this month", summary["prs_this_month"])
+        col1.metric("Volume in latest logged week", f"{summary['weekly_volume']:,.0f} kg")
+        col2.metric("Training days in latest logged week", summary["training_days_this_week"])
+        col3.metric("PRs in latest logged month", summary["prs_this_month"])
         col4.metric("Best e1RM", f"{summary['best_e1rm']:.1f} kg")
 
         st.divider()
@@ -165,7 +191,7 @@ with tab_dashboard:
                 markers=True,
                 title="Weekly volume trend",
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
             e1rm = exercise_e1rm(df)
 
@@ -186,7 +212,7 @@ with tab_dashboard:
                     markers=True,
                     title="Estimated 1RM trend",
                 )
-                st.plotly_chart(fig2, use_container_width=True)
+                st.plotly_chart(fig2, width="stretch")
         
         elif view == "Workout-day analytics":
             workouts = sorted(df["workout"].dropna().unique())
@@ -218,7 +244,7 @@ with tab_dashboard:
                 markers=True,
                 title=f"{selected_workout} volume progression",
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
             fig2 = px.line(
                 workout_by_date,
@@ -227,7 +253,7 @@ with tab_dashboard:
                 markers=True,
                 title=f"{selected_workout} set count progression",
             )
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2, width="stretch")
 
             st.subheader("Exercise progression within this workout")
 
@@ -260,7 +286,7 @@ with tab_dashboard:
                 markers=True,
                 title=f"{selected_exercise} e1RM inside {selected_workout}",
             )
-            st.plotly_chart(fig3, use_container_width=True)
+            st.plotly_chart(fig3, width="stretch")
 
             fig4 = px.bar(
                 exercise_by_date,
@@ -268,7 +294,7 @@ with tab_dashboard:
                 y="volume_kg",
                 title=f"{selected_exercise} volume inside {selected_workout}",
             )
-            st.plotly_chart(fig4, use_container_width=True)
+            st.plotly_chart(fig4, width="stretch")
 
             st.dataframe(
                 exercise_df[
@@ -285,7 +311,7 @@ with tab_dashboard:
                         "notes",
                     ]
                 ].sort_values(["date", "set_number"]),
-                use_container_width=True,
+                width="stretch",
             )
 
         elif view == "Exercise analytics":
@@ -311,7 +337,7 @@ with tab_dashboard:
                 markers=True,
                 title=f"{selected_exercise} e1RM trend",
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
             ex_volume = exercise_volume(df)
             ex_volume = ex_volume[
@@ -324,7 +350,7 @@ with tab_dashboard:
                 y="volume_kg",
                 title=f"{selected_exercise} volume trend",
             )
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2, width="stretch")
 
             st.subheader("Set history")
             st.dataframe(
@@ -340,7 +366,7 @@ with tab_dashboard:
                         "notes",
                     ]
                 ],
-                use_container_width=True,
+                width="stretch",
             )
 
         elif view == "PRs":
@@ -349,7 +375,7 @@ with tab_dashboard:
             if prs.empty:
                 st.info("No PRs detected yet.")
             else:
-                st.dataframe(prs.sort_values("date", ascending=False), use_container_width=True)
+                st.dataframe(prs.sort_values("date", ascending=False), width="stretch")
 
         elif view == "Advanced":
             st.subheader("Rep range distribution")
@@ -366,7 +392,7 @@ with tab_dashboard:
                 y="sets",
                 title="Rep range distribution",
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
             st.subheader("Exercise frequency")
 
@@ -383,4 +409,10 @@ with tab_dashboard:
                 y="sessions",
                 title="Exercise frequency",
             )
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2, width="stretch")
+
+with tab_training:
+    render_training()
+
+with tab_progress:
+    render_progress()

@@ -1,5 +1,38 @@
 # Workout AI Log
 
+## GymCoach AI: aktueller Stand
+
+Die Streamlit-App enthält jetzt zusätzlich Trainingsverwaltung, vorläufig migrierte
+Historie, eine nachvollziehbare Fortschreibungsprognose für den nächsten
+geschätzten 1RM-Wert und eine optionale KI-Erklärung. Das ursprüngliche
+`workout_sets`-Schema und der Notizimport bleiben erhalten. Die historische
+Zuordnung nach Datum und Workout-Text ist vorläufig; die Originalzeilen stehen
+weiterhin unverändert in `workout_sets`.
+Die vier Grundvorlagen **Leg 1**, **Upper Body 1**, **Leg 2** und **Upper Body 2**
+sind mit regelmäßig protokollierten Übungen angelegt und können in der
+Trainingsverwaltung bearbeitet werden.
+
+### Lokal starten
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+Für Parser und KI-Erklärung ist `OPENAI_API_KEY` in einer lokalen `.env`-Datei
+erforderlich. Bei Ausfall der KI-Erklärung bleiben Kennzahlen, Empfehlung und
+deterministischer Erklärungstext verfügbar.
+Die lokale `.env` hat Vorrang vor einem bereits gesetzten Prozesswert für
+`OPENAI_API_KEY`. Ein Live-Test der KI-Erklärung mit diesem Wert war erfolgreich.
+
+Tests: `python -B -m unittest discover -s tests -v`.
+Die wissenschaftliche Methodik und die tatsächlich gemessenen Baseline-Fehler
+stehen in [docs/AI_PROJECT_DOCUMENTATION.md](docs/AI_PROJECT_DOCUMENTATION.md).
+Die Sicherung vor der historischen Migration liegt lokal unter
+`data/workout_log.pre_gymcoach_backup.duckdb` und ist von Git ausgeschlossen.
+
 A personal data engineering and AI project for tracking gym workouts, analyzing strength progression, and practicing modern data engineering concepts.
 
 The project is built as a learning platform to practice:
@@ -475,7 +508,7 @@ workout-ai-log/
 
 ---
 
-# Current Status
+# Ursprünglicher MVP-Status (historische Projektbeschreibung)
 
 Phase: MVP
 
